@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phantom Forces Scrim & Ban-Pick Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Teko:wght@500;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
+        .font-teko { font-family: 'Teko', sans-serif; }
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #0b0f19; color: #f3f4f6; }
+        .phantom-glow { text-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
+        .ghost-glow { text-shadow: 0 0 10px rgba(249, 115, 22, 0.5); }
+        /* 스크롤바 커스텀 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #111827; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-blue-600 selection:text-white">
+
+    <!-- 상단 네비게이션 -->
+    <header class="bg-gray-900/90 border-b border-gray-800 sticky top-0 z-50 backdrop-blur">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="bg-gradient-to-r from-blue-600 to-orange-600 p-2.5 rounded-xl shadow-lg">
+                    <i class="fa-solid fa-crosshairs text-white text-xl animate-pulse"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-black tracking-wider text-white font-teko uppercase">Phantom Forces <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-orange-500">Scrim Manager</span></h1>
+                    <p class="text-xs text-gray-400">내전 팀 편성 & 밴픽 시스템</p>
+                </div>
+            </div>
+
+            <!-- 매치 정보 입력 바 -->
+            <div class="flex items-center gap-2 bg-gray-950 px-3 py-1.5 rounded-lg border border-gray-800">
+                <input type="text" id="matchTitle" value="팬텀 포스 주말 내전" class="bg-transparent text-sm font-bold text-gray-200 outline-none w-36 text-center border-b border-transparent focus:border-cyan-500 transition">
+                <span class="text-gray-600">|</span>
+                <select id="mapSelect" class="bg-gray-900 text-xs text-cyan-400 font-medium px-2 py-1 rounded outline-none border border-gray-800 cursor-pointer">
+                    <option value="Desert Storm">모래 폭풍 (Desert Storm)</option>
+                    <option value="Metro">지하철 (Metro)</option>
+                    <option value="Rig">리그 (Rig)</option>
+                    <option value="Highway Lot">고속도로 부지 (Highway Lot)</option>
+                    <option value="Mirage">미라지 (Mirage)</option>
+                    <option value="Subway">서브웨이 (Subway)</option>
+                </select>
+                <button onclick="saveData()" class="bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-400 border border-cyan-500/30 px-3 py-1 rounded text-xs font-bold transition flex items-center gap-1">
+                    <i class="fa-solid fa-floppy-disk"></i> 저장
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-grow grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
+
+        <!-- 좌측: 로스터 및 팀 빌딩 (5 컬럼) -->
+        <section class="lg:col-span-5 flex flex-col gap-6">
+            <!-- 플레이어 등록 카드 -->
+            <div class="bg-gray-900/60 border border-gray-800/80 rounded-2xl p-5 shadow-xl backdrop-blur">
+                <h2 class="text-lg font-bold text-white mb-3 flex items-center justify-between">
+                    <span><i class="fa-solid fa-users text-cyan-400 mr-2"></i>참가자 명단 관리</span>
+                    <span id="playerCount" class="text-xs font-normal bg-gray-800 text-gray-300 px-2.5 py-1 rounded-full">0명 등록됨</span>
+                </h2>
+
+                <!-- 개별 추가 -->
+                <div class="flex gap-2 mb-3">
+                    <input type="text" id="playerName" placeholder="닉네임 입력" class="flex-grow bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500">
+                    <input type="number" id="playerRank" placeholder="랭크" min="1" max="999" class="w-20 bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500">
+                    <button onclick="addPlayer()" class="bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-4 py-2 rounded-xl text-sm transition shadow-lg shadow-cyan-900/20">추가</button>
+                </div>
+
+                <!-- 일괄 붙여넣기 토글 -->
+                <details class="group mb-3">
+                    <summary class="text-xs text-gray-400 cursor-pointer hover:text-cyan-400 transition select-none">📋 명단 일괄 붙여넣기 (클릭하여 열기)</summary>
+                    <div class="mt-2 flex flex-col gap-2">
+                        <textarea id="bulkInput" rows="3" placeholder="예시:&#10;닉네임1 150&#10;닉네임2, 85&#10;닉네임3 (210)" class="w-full bg-gray-950 border border-gray-800 rounded-xl p-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500 resize-none"></textarea>
+                        <button onclick="bulkAddPlayers()" class="bg-gray-800 hover:bg-gray-700 text-gray-200 font-bold py-1.5 rounded-xl text-xs transition border border-gray-700">일괄 등록 실행</button>
+                    </div>
+                </details>
+
+                <!-- 팀 배정 버튼들 -->
+                <div class="grid grid-cols-3 gap-2 mb-4">
+                    <button onclick="balanceTeams('random')" class="bg-gray-800 hover:bg-gray-700 text-cyan-400 border border-cyan-500/30 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-shuffle"></i> 랜덤 섞기
+                    </button>
+                    <button onclick="balanceTeams('rank')" class="bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-xl text-xs font-bold transition shadow-lg shadow-blue-900/20 flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-scale-balanced"></i> 랭크 밸런스
+                    </button>
+                    <button onclick="resetRoster()" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 py-2 rounded-xl text-xs font-bold transition">
+                        초기화
+                    </button>
+                </div>
+
+                <!-- 대기 명단 (Bench) -->
+                <div class="border-t border-gray-800 pt-3">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold text-gray-400 uppercase tracking-wider">대기 명단 (Bench)</span>
+                        <span id="benchCount" class="text-xs text-gray-500">0명</span>
+                    </div>
+                    <div id="benchList" class="min-h-[70px] max-h-36 overflow-y-auto bg-gray-950/50 border border-gray-800/60 rounded-xl p-2 flex flex-wrap gap-1.5 content-start">
+                        <span class="text-xs text-gray-600 m-auto py-2">등록된 대기 인원이 없습니다.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 양 팀 로스터 현황 -->
+            <div class="grid grid-cols-2 gap-4">
+                <!-- Phantoms 팀 -->
+                <div class="bg-gray-900/60 border border-cyan-500/30 rounded-2xl p-4 shadow-xl flex flex-col">
+                    <div class="flex justify-between items-center mb-3 border-b border-cyan-500/20 pb-2">
+                        <div>
+                            <h3 class="font-black text-cyan-400 text-lg tracking-wide uppercase font-teko">PHANTOMS</h3>
+                            <span id="phantomsAvg" class="text-xs text-gray-400">평균 랭크: Lv.0</span>
+                        </div>
+                        <span id="phantomsCount" class="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs px-2 py-0.5 rounded-full font-bold">0명</span>
+                    </div>
+                    <div id="phantomsList" class="flex-grow min-h-[160px] max-h-60 overflow-y-auto flex flex-col gap-1.5">
+                        <span class="text-xs text-gray-600 m-auto">팀원이 없습니다.</span>
+                    </div>
+                </div>
+
+                <!-- Ghosts 팀 -->
+                <div class="bg-gray-900/60 border border-orange-500/30 rounded-2xl p-4 shadow-xl flex flex-col">
+                    <div class="flex justify-between items-center mb-3 border-b border-orange-500/20 pb-2">
+                        <div>
+                            <h3 class="font-black text-orange-400 text-lg tracking-wide uppercase font-teko">GHOSTS</h3>
+                            <span id="ghostsAvg" class="text-xs text-gray-400">평균 랭크: Lv.0</span>
+                        </div>
+                        <span id="ghostsCount" class="bg-orange-500/10 text-orange-400 border border-orange-500/20 text-xs px-2 py-0.5 rounded-full font-bold">0명</span>
+                    </div>
+                    <div id="ghostsList" class="flex-grow min-h-[160px] max-h-60 overflow-y-auto flex flex-col gap-1.5">
+                        <span class="text-xs text-gray-600 m-auto">팀원이 없습니다.</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 우측: 무기 밴픽 & 타이머 시스템 (7 컬럼) -->
+        <section class="lg:col-span-7 flex flex-col gap-6">
+            <!-- 밴픽 컨트롤 패널 -->
+            <div class="bg-gray-900/60 border border-gray-800/80 rounded-2xl p-5 shadow-xl backdrop-blur flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-bold text-gray-300"><i class="fa-solid fa-ban text-red-500 mr-1.5"></i>밴 권한 선택:</span>
+                        <div class="inline-flex rounded-xl p-1 bg-gray-950 border border-gray-800">
+                            <button onclick="setBanTeam('PHANTOMS')" id="btnBanPhantoms" class="px-3 py-1.5 rounded-lg text-xs font-bold transition text-cyan-400 bg-cyan-500/10 border border-cyan-500/30">PHANTOMS 밴</button>
+                            <button onclick="setBanTeam('GHOSTS')" id="btnBanGhosts" class="px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-400 hover:text-white">GHOSTS 밴</button>
+                            <button onclick="setBanTeam('COMMON')" id="btnBanCommon" class="px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-400 hover:text-white">공통/운영진</button>
+                        </div>
+                    </div>
+
+                    <!-- 타이머 위젯 -->
+                    <div class="flex items-center gap-2 bg-gray-950 px-3 py-1.5 rounded-xl border border-gray-800">
+                        <span id="timerDisplay" class="font-teko text-2xl font-bold text-yellow-400 tracking-wider">00:30</span>
+                        <div class="flex gap-1">
+                            <button onclick="startTimer(30)" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs font-bold">30초</button>
+                            <button onclick="startTimer(60)" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs font-bold">60초</button>
+                            <button onclick="stopTimer()" class="bg-red-500/20 hover:bg-red-500/30 text-red-400 px-2 py-1 rounded text-xs"><i class="fa-solid fa-rotate-left"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 빠른 규칙 프리셋 토글 -->
+                <div class="flex flex-wrap gap-2 pt-1 border-t border-gray-800">
+                    <span class="text-xs text-gray-400 self-center font-medium mr-1">빠른 규칙:</span>
+                    <button onclick="toggleQuickRule('shotgun')" id="ruleShotgun" class="text-xs px-2.5 py-1 rounded-lg border border-gray-800 bg-gray-950 text-gray-400 hover:border-gray-700 transition">🛑 샷건 전체 금지</button>
+                    <button onclick="toggleQuickRule('bmg')" id="ruleBmg" class="text-xs px-2.5 py-1 rounded-lg border border-gray-800 bg-gray-950 text-gray-400 hover:border-gray-700 transition">🎯 .50 BMG (BFG/M107 등) 금지</button>
+                    <button onclick="toggleQuickRule('dmr')" id="ruleDmr" class="text-xs px-2.5 py-1 rounded-lg border border-gray-800 bg-gray-950 text-gray-400 hover:border-gray-700 transition">⚡ 마크스맨/반자동 특총 금지</button>
+                </div>
+            </div>
+
+            <!-- 무기 선택 및 밴 목록 패널 -->
+            <div class="bg-gray-900/60 border border-gray-800/80 rounded-2xl p-5 shadow-xl backdrop-blur flex-grow flex flex-col">
+                <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+                    <div class="flex gap-1.5 overflow-x-auto pb-1 max-w-full" id="categoryTabs">
+                        <button onclick="filterCategory('ALL')" class="cat-btn bg-cyan-600 text-white text-xs px-3 py-1.5 rounded-xl font-bold transition shrink-0">전체</button>
+                        <button onclick="filterCategory('AR')" class="cat-btn bg-gray-800 text-gray-300 text-xs px-3 py-1.5 rounded-xl font-bold hover:bg-gray-700 transition shrink-0">돌격소총</button>
+                        <button onclick="filterCategory('PDW')" class="cat-btn bg-gray-800 text-gray-300 text-xs px-3 py-1.5 rounded-xl font-bold hover:bg-gray-700 transition shrink-0">PDW</button>
+                        <button onclick="filterCategory('LMG')" class="cat-btn bg-gray-800 text-gray-300 text-xs px-3 py-1.5 rounded-xl font-bold hover:bg-gray-700 transition shrink-0">LMG</button>
+                        <button onclick="filterCategory('SR')" class="cat-btn bg-gray-800 text-gray-300 text-xs px-3 py-1.5 rounded-xl font-bold hover:bg-gray-700 transition shrink-0">저격소총</button>
+                        <button onclick="filterCategory('SG')" class="cat-btn bg-gray-800 text-gray-300 text-xs px-3 py-1.5 rounded-xl font-bold hover:bg-gray-700 transition shrink-0">샷건</button>
+                        <button onclick="filterCategory('DMR')" class="cat-btn bg-gray-800 text-gray-300 text-xs px-3 py-1.5 rounded-xl font-bold hover:bg-gray-700 transition shrink-0">DMR/카빈</button>
+                    </div>
+                    <input type="text" id="weaponSearch" oninput="renderWeapons()" placeholder="무기 검색..." class="bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 w-36">
+                </div>
+
+                <!-- 무기 카드 그리드 -->
+                <div id="weaponGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-72 overflow-y-auto p-1 mb-4">
+                    <!-- 자바스크립트로 동적 생성 -->
+                </div>
+
+                <!-- 현재 확정된 밴 목록 -->
+                <div class="border-t border-gray-800 pt-4 mt-auto">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold text-gray-400 uppercase tracking-wider"><i class="fa-solid-solid fa-triangle-exclamation text-yellow-500 mr-1"></i>현재 밴된 무기 및 규칙 목록</span>
+                        <button onclick="copyResult()" class="bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 border border-cyan-500/30 px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                            <i class="fa-solid fa-copy"></i> 디스코드 결과 복사
+                        </button>
+                    </div>
+                    <div id="bannedListContainer" class="flex flex-wrap gap-2 min-h-[50px] bg-gray-950/50 border border-gray-800/60 rounded-xl p-2.5">
+                        <span class="text-xs text-gray-600 m-auto">밴된 무기나 규칙이 없습니다.</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 자바스크립트 로직 -->
+    <script>
+        const weapons = [
+            { name: "M4A1", cat: "AR" }, { name: "HK416", cat: "AR" }, { name: "C7A2", cat: "AR" },
+            { name: "M16A4", cat: "AR" }, { name: "SCAR-L", cat: "AR" }, { name: "FAMAS", cat: "AR" },
+            { name: "AN-94", cat: "AR" }, { name: "AK-12", cat: "AR" }, { name: "AK-47", cat: "AR" },
+            { name: "AS VAL", cat: "AR" }, { name: "G36", cat: "AR" }, { name: "AUG A1", cat: "AR" },
+            
+            { name: "MP5", cat: "PDW" }, { name: "MAC-10", cat: "PDW" }, { name: "P90", cat: "PDW" },
+            { name: "VECTOR", cat: "PDW" }, { name: "MP7", cat: "PDW" }, { name: "PP-19", cat: "PDW" },
+            { name: "UMP45", cat: "PDW" }, { name: "K7", cat: "PDW" }, { name: "M3 A1", cat: "PDW" },
+
+            { name: "M60", cat: "LMG" }, { name: "MG3KWS", cat: "LMG" }, { name: "RPK", cat: "LMG" },
+            { name: "HK21", cat: "LMG" }, { name: "COLT LMG", cat: "LMG" }, { name: "HAMR", cat: "LMG" },
+
+            { name: "BFG 50", cat: "SR" }, { name: "M107", cat: "SR" }, { name: "HECATE II", cat: "SR" },
+            { name: "TRG-42", cat: "SR" }, { name: "AWM", cat: "SR" }, { name: "SVDS", cat: "SR" },
+            { name: "SCOUT", cat: "SR" }, { name: "INTERVENTION", cat: "SR" },
+
+            { name: "AA-12", cat: "SG" }, { name: "DBV-12", cat: "SG" }, { name: "KS-23M", cat: "SG" },
+            { name: "REMINGTON 870", cat: "SG" }, { name: "SAIGA-12", cat: "SG" }, { name: "KSG", cat: "SG" },
+
+            { name: "MK11", cat: "DMR" }, { name: "SKS", cat: "DMR" }, { name: "VSS VINTOREZ", cat: "DMR" },
+            { name: "AG-3", cat: "DMR" }, { name: "SCAR-H", cat: "DMR" }, { name: "MC51", cat: "DMR" }
+        ];
+
+        let state = {
+            players: [],
+            phantoms: [],
+            ghosts: [],
+            bench: [],
+            bannedWeapons: [], // { name, team }
+            quickRules: { shotgun: false, bmg: false, dmr: false },
+            currentBanTeam: 'PHANTOMS',
+            currentCategory: 'ALL'
+        };
+
+        let timerInterval = null;
+        let timeLeft = 30;
+
+        function init() {
+            loadData();
+            renderWeapons();
+            renderAll();
+        }
+
+        function saveData() {
+            state.matchTitle = document.getElementById('matchTitle').value;
+            state.map = document.getElementById('mapSelect').value;
+            localStorage.setItem('pf_scrim_state', JSON.stringify(state));
+            alert("매치 정보와 로스터가 브라우저에 저장되었습니다!");
+        }
+
+        function loadData() {
+            const saved = localStorage.getItem('pf_scrim_state');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    state = { ...state, ...parsed };
+                    if (state.matchTitle) document.getElementById('matchTitle').value = state.matchTitle;
+                    if (state.map) document.getElementById('mapSelect').value = state.map;
+                    if (state.quickRules) {
+                        for (let r in state.quickRules) {
+                            if (state.quickRules[r]) {
+                                document.getElementById('rule' + r.charAt(0).toUpperCase() + r.slice(1)).classList.add('border-cyan-500', 'bg-cyan-500/10', 'text-cyan-400');
+                            }
+                        }
+                    }
+                } catch(e) {}
+            }
+        }
+
+        function addPlayer() {
+            const nameInput = document.getElementById('playerName');
+            const rankInput = document.getElementById('playerRank');
+            const name = nameInput.value.trim();
+            const rank = parseInt(rankInput.value) || 50;
+
+            if (!name) return alert("닉네임을 입력해주세요.");
+            
+            state.players.push({ name, rank });
+            state.bench.push({ name, rank });
+            
+            nameInput.value = '';
+            rankInput.value = '';
+            renderAll();
+            saveData();
+        }
+
+        function bulkAddPlayers() {
+            const text = document.getElementById('bulkInput').value.trim();
+            if (!text) return;
+            
+            const lines = text.split('\n');
+            lines.forEach(line => {
+                const parts = line.trim().split(/[\s,]+/);
+                if (parts.length >= 1) {
+                    const name = parts[0];
+                    let rank = parseInt(parts[1]) || 50;
+                    if (name) {
+                        state.players.push({ name, rank });
+                        state.bench.push({ name, rank });
+                    }
+                }
+            });
+            document.getElementById('bulkInput').value = '';
+            renderAll();
+            saveData();
+            alert("일괄 등록이 완료되었습니다.");
+        }
+
+        function resetRoster() {
+            if (!confirm("모든 로스터를 초기화하시겠습니까?")) return;
+            state.players = [];
+            state.phantoms = [];
+            state.ghosts = [];
+            state.bench = [];
+            renderAll();
+            saveData();
+        }
+
+        function balanceTeams(mode) {
+            if (state.players.length === 0) return alert("등록된 플레이어가 없습니다.");
+            
+            let pool = [...state.players];
+            state.phantoms = [];
+            state.ghosts = [];
+            state.bench = [];
+
+            if (mode === 'random') {
+                pool.sort(() => Math.random() - 0.5);
+                pool.forEach((p, idx) => {
+                    if (idx % 2 === 0) state.phantoms.push(p);
+                    else state.ghosts.push(p);
+                });
+            } else if (mode === 'rank') {
+                pool.sort((a, b) => b.rank - a.rank);
+                pool.forEach(p => {
+                    const pAvg = state.phantoms.reduce((acc, cur) => acc + cur.rank, 0) / (state.phantoms.length || 1);
+                    const gAvg = state.ghosts.reduce((acc, cur) => acc + cur.rank, 0) / (state.ghosts.length || 1);
+                    
+                    if (state.phantoms.length <= state.ghosts.length && pAvg <= gAvg) {
+                        state.phantoms.push(p);
+                    } else if (state.ghosts.length < state.phantoms.length) {
+                        state.ghosts.push(p);
+                    } else {
+                        if (pAvg <= gAvg) state.phantoms.push(p);
+                        else state.ghosts.push(p);
+                    }
+                });
+            }
+            renderAll();
+            saveData();
+        }
+
+        function moveToBench(name, fromTeam) {
+            if (fromTeam === 'phantoms') {
+                state.phantoms = state.phantoms.filter(p => p.name !== name);
+            } else if (fromTeam === 'ghosts') {
+                state.ghosts = state.ghosts.filter(p => p.name !== name);
+            }
+            const pObj = state.players.find(p => p.name === name);
+            if (pObj && !state.bench.some(p => p.name === name)) {
+                state.bench.push(pObj);
+            }
+            renderAll();
+            saveData();
+        }
+
+        function assignToTeam(name, targetTeam) {
+            state.bench = state.bench.filter(p => p.name !== name);
+            state.phantoms = state.phantoms.filter(p => p.name !== name);
+            state.ghosts = state.ghosts.filter(p => p.name !== name);
+
+            const pObj = state.players.find(p => p.name === name) || { name, rank: 50 };
+            if (targetTeam === 'phantoms') state.phantoms.push(pObj);
+            if (targetTeam === 'ghosts') state.ghosts.push(pObj);
+            if (targetTeam === 'bench') state.bench.push(pObj);
+
+            renderAll();
+            saveData();
+        }
+
+        function setBanTeam(team) {
+            state.currentBanTeam = team;
+            ['PHANTOMS', 'GHOSTS', 'COMMON'].forEach(t => {
+                const btn = document.getElementById('btnBan' + t.charAt(0) + t.slice(1).toLowerCase());
+                if (!btn) return;
+                if (t === team) {
+                    btn.className = `px-3 py-1.5 rounded-lg text-xs font-bold transition ${t === 'PHANTOMS' ? 'text-cyan-400 bg-cyan-500/10 border border-cyan-500/30' : t === 'GHOSTS' ? 'text-orange-400 bg-orange-500/10 border border-orange-500/30' : 'text-yellow-400 bg-yellow-500/10 border border-yellow-500/30'}`;
+                } else {
+                    btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-400 hover:text-white";
+                }
+            });
+        }
+
+        function filterCategory(cat) {
+            state.currentCategory = cat;
+            document.querySelectorAll('.cat-btn').forEach(btn => {
+                btn.className = "cat-btn bg-gray-800 text-gray-300 text-xs px-3 py-1.5 rounded-xl font-bold hover:bg-gray-700 transition shrink-0";
+            });
+            event.target.className = "cat-btn bg-cyan-600 text-white text-xs px-3 py-1.5 rounded-xl font-bold transition shrink-0";
+            renderWeapons();
+        }
+
+        function renderWeapons() {
+            const grid = document.getElementById('weaponGrid');
+            const search = document.getElementById('weaponSearch').value.toLowerCase();
+            grid.innerHTML = '';
+
+            const filtered = weapons.filter(w => {
+                const matchCat = state.currentCategory === 'ALL' || w.cat === state.currentCategory;
+                const matchSearch = w.name.toLowerCase().includes(search);
+                return matchCat && matchSearch;
+            });
+
+            if (filtered.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-center py-6 text-xs text-gray-600">검색된 무기가 없습니다.</div>';
+                return;
+            }
+
+            filtered.forEach(w => {
+                const isBanned = state.bannedWeapons.some(b => b.name === w.name);
+                const card = document.createElement('div');
+                card.className = `p-2.5 rounded-xl border flex flex-col justify-between cursor-pointer transition ${isBanned ? 'bg-red-950/20 border-red-500/40 opacity-60' : 'bg-gray-950/80 border-gray-800 hover:border-gray-700 hover:bg-gray-900'}`;
+                card.onclick = () => toggleWeaponBan(w.name);
+                
+                card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <span class="text-xs font-bold text-gray-200">${w.name}</span>
+                        <span class="text-[10px] px-1.5 py-0.2 bg-gray-900 text-gray-400 rounded">${w.cat}</span>
+                    </div>
+                    <div class="mt-2 text-right">
+                        ${isBanned ? '<span class="text-[10px] text-red-400 font-bold">BANNED</span>' : '<span class="text-[10px] text-gray-500">클릭하여 밴</span>'}
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function toggleWeaponBan(name) {
+            const idx = state.bannedWeapons.findIndex(b => b.name === name);
+            if (idx >= 0) {
+                state.bannedWeapons.splice(idx, 1);
+            } else {
+                state.bannedWeapons.push({ name, team: state.currentBanTeam });
+            }
+            renderWeapons();
+            renderBannedList();
+            saveData();
+        }
+
+        function toggleQuickRule(ruleKey) {
+            state.quickRules[ruleKey] = !state.quickRules[ruleKey];
+            const btn = document.getElementById('rule' + ruleKey.charAt(0).toUpperCase() + ruleKey.slice(1));
+            if (state.quickRules[ruleKey]) {
+                btn.className = "text-xs px-2.5 py-1 rounded-lg border border-cyan-500/40 bg-cyan-500/10 text-cyan-400 transition font-bold";
+            } else {
+                btn.className = "text-xs px-2.5 py-1 rounded-lg border border-gray-800 bg-gray-950 text-gray-400 hover:border-gray-700 transition";
+            }
+            renderBannedList();
+            saveData();
+        }
+
+        function renderBannedList() {
+            const container = document.getElementById('bannedListContainer');
+            container.innerHTML = '';
+
+            let hasItems = false;
+
+            // 빠른 규칙 렌더링
+            const ruleNames = { shotgun: "🛑 샷건 전체 금지", bmg: ".50 BMG 금지", dmr: "마크스맨/반자동 특총 금지" };
+            for (let r in state.quickRules) {
+                if (state.quickRules[r]) {
+                    hasItems = true;
+                    const tag = document.createElement('span');
+                    tag.className = "bg-red-500/10 border border-red-500/30 text-red-400 text-xs px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5";
+                    tag.innerHTML = `${ruleNames[r]} <button onclick="toggleQuickRule('${r}')" class="hover:text-white ml-1">×</button>`;
+                    container.appendChild(tag);
+                }
+            }
+
+            // 밴 무기 렌더링
+            state.bannedWeapons.forEach(b => {
+                hasItems = true;
+                const tag = document.createElement('span');
+                let teamColor = b.team === 'PHANTOMS' ? 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10' : b.team === 'GHOSTS' ? 'text-orange-400 border-orange-500/30 bg-orange-500/10' : 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10';
+                
+                tag.className = `border text-xs px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 ${teamColor}`;
+                tag.innerHTML = `[${b.team}] ${b.name} <button onclick="toggleWeaponBan('${b.name}')" class="hover:text-white ml-1">×</button>`;
+                container.appendChild(tag);
+            });
+
+            if (!hasItems) {
+                container.innerHTML = '<span class="text-xs text-gray-600 m-auto">밴된 무기나 규칙이 없습니다.</span>';
+            }
+        }
+
+        function renderAll() {
+            document.getElementById('playerCount').innerText = `${state.players.length}명 등록됨`;
+            document.getElementById('benchCount').innerText = `${state.bench.length}명`;
+            document.getElementById('phantomsCount').innerText = `${state.phantoms.length}명`;
+            document.getElementById('ghostsCount').innerText = `${state.ghosts.length}명`;
+
+            // 평균 랭크 계산
+            const pAvg = state.phantoms.length ? Math.round(state.phantoms.reduce((a,c)=>a+c.rank,0)/state.phantoms.length) : 0;
+            const gAvg = state.ghosts.length ? Math.round(state.ghosts.reduce((a,c)=>a+c.rank,0)/state.ghosts.length) : 0;
+            document.getElementById('phantomsAvg').innerText = `평균 랭크: Lv.${pAvg}`;
+            document.getElementById('ghostsAvg').innerText = `평균 랭크: Lv.${gAvg}`;
+
+            // 대기 명단 렌더링
+            const benchList = document.getElementById('benchList');
+            benchList.innerHTML = state.bench.length === 0 ? '<span class="text-xs text-gray-600 m-auto py-2">등록된 대기 인원이 없습니다.</span>' : '';
+            state.bench.forEach(p => {
+                const tag = document.createElement('div');
+                tag.className = "bg-gray-900 border border-gray-800 rounded-lg px-2 py-1 text-xs flex items-center gap-2";
+                tag.innerHTML = `<span>${p.name} <span class="text-gray-500 text-[10px]">(${p.rank})</span></span> <div class="flex gap-1"><button onclick="assignToTeam('${p.name}', 'phantoms')" class="text-cyan-400 hover:text-white font-bold">P</button><button onclick="assignToTeam('${p.name}', 'ghosts')" class="text-orange-400 hover:text-white font-bold">G</button></div>`;
+                benchList.appendChild(tag);
+            });
+
+            // 팬텀즈 렌더링
+            const phantomsList = document.getElementById('phantomsList');
+            phantomsList.innerHTML = state.phantoms.length === 0 ? '<span class="text-xs text-gray-600 m-auto">팀원이 없습니다.</span>' : '';
+            state.phantoms.forEach(p => {
+                const tag = document.createElement('div');
+                tag.className = "bg-cyan-950/20 border border-cyan-500/20 rounded-xl p-2 text-xs flex justify-between items-center";
+                tag.innerHTML = `<span><strong class="text-cyan-300">${p.name}</strong> <span class="text-gray-500 text-[10px]">Lv.${p.rank}</span></span> <button onclick="moveToBench('${p.name}', 'phantoms')" class="text-gray-500 hover:text-red-400"><i class="fa-solid fa-arrow-rotate-left"></i></button>`;
+                phantomsList.appendChild(tag);
+            });
+
+            // 고스트 렌더링
+            const ghostsList = document.getElementById('ghostsList');
+            ghostsList.innerHTML = state.ghosts.length === 0 ? '<span class="text-xs text-gray-600 m-auto">팀원이 없습니다.</span>' : '';
+            state.ghosts.forEach(p => {
+                const tag = document.createElement('div');
+                tag.className = "bg-orange-950/20 border border-orange-500/20 rounded-xl p-2 text-xs flex justify-between items-center";
+                tag.innerHTML = `<span><strong class="text-orange-300">${p.name}</strong> <span class="text-gray-500 text-[10px]">Lv.${p.rank}</span></span> <button onclick="moveToBench('${p.name}', 'ghosts')" class="text-gray-500 hover:text-red-400"><i class="fa-solid fa-arrow-rotate-left"></i></button>`;
+                ghostsList.appendChild(tag);
+            });
+
+            renderBannedList();
+        }
+
+        // 타이머 로직
+        function startTimer(seconds) {
+            stopTimer();
+            timeLeft = seconds;
+            updateTimerDisplay();
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                updateTimerDisplay();
+                if (timeLeft <= 0) {
+                    stopTimer();
+                    alert("밴픽 타임아웃!");
+                }
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = null;
+        }
+
+        function updateTimerDisplay() {
+            const m = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+            const s = String(timeLeft % 60).padStart(2, '0');
+            document.getElementById('timerDisplay').innerText = `${m}:${s}`;
+        }
+
+        function copyResult() {
+            let text = `🔥 [ ${document.getElementById('matchTitle').value} ] 내전 결과 🔥\n`;
+            text += `🗺️ 맵: ${document.getElementById('mapSelect').value}\n\n`;
+            
+            text += `🔵 PHANTOMS 팀 (${state.phantoms.length}명)\n`;
+            state.phantoms.forEach(p => text += `- ${p.name} (Lv.${p.rank})\n`);
+            
+            text += `\n🟠 GHOSTS 팀 (${state.ghosts.length}명)\n`;
+            state.ghosts.forEach(p => text += `- ${p.name} (Lv.${p.rank})\n`);
+            
+            text += `\n🚫 금지된 무기 및 규칙:\n`;
+            for (let r in state.quickRules) {
+                if (state.quickRules[r]) text += `• ${r}\n`;
+            }
+            state.bannedWeapons.forEach(b => text += `• [${b.team}] ${b.name}\n`);
+
+            navigator.clipboard.writeText(text).then(() => {
+                alert("내전 결과가 클립보드에 복사되었습니다! 디스코드에 붙여넣어 보세요.");
+            });
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
